@@ -21,6 +21,33 @@
 
   if (UP_HOURS_SPAN) UP_HOURS_SPAN.textContent = String(UPCOMING_HOURS);
 
+// Demo mode toggle
+const DEMO = urlParams.get("demo") === "1";
+const DEMO_DATA = [
+  {
+    id: "demo1",
+    event: { name: "Demo Cup Finals", logo: null },
+    team1: { name: "TheMongolZ", logo: null },
+    team2: { name: "Heroic", logo: null },
+    status: "live",
+    map: "Inferno",
+    format: "bo1",
+    score1: 7,
+    score2: 10,
+    time: Date.now()
+  },
+  {
+    id: "demo2",
+    event: { name: "Demo League", logo: null },
+    team1: { name: "G2", logo: null },
+    team2: { name: "NaVi", logo: null },
+    status: "upcoming",
+    map: "Mirage",
+    format: "bo3",
+    time: Date.now() + 2 * 60 * 60 * 1000 // 2 hours later
+  }
+];
+  
   // --- UI bindings ---
   if (REFRESH_SELECT) {
     REFRESH_SELECT.value = String(refreshMs);
