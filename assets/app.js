@@ -2,36 +2,43 @@
   const ROOT = document.getElementById("matchesRoot");
   if (!ROOT) return;
 
-  const LIST = document.getElementById("list");
-  const LAST = document.getElementById("lastUpdated");
+  const LIST_LIVE = document.getElementById("listLive");
+  const LIST_UP   = document.getElementById("listUpcoming");
+  const LAST      = document.getElementById("lastUpdated");
   const REFRESH_SELECT = document.getElementById("refreshSelect");
   const TEAM_BADGE = document.getElementById("teamBadge");
+  const UP_HOURS_SPAN = document.getElementById("upHoursSpan");
 
-  // Read config
-  const API_DEFAULT = ROOT.dataset.api; // community JSON endpoint
+  // Config from HTML/data-attrs + URL params
+  const API_DEFAULT = ROOT.dataset.api;
   const urlParams = new URLSearchParams(location.search);
-  const API = urlParams.get("api") || API_DEFAULT;          // override: ?api=...
-  const TEAM_PIN = (urlParams.get("team") || "").trim();    // optional: ?team=TheMongolZ
+  const API = urlParams.get("api") || API_DEFAULT;
   let refreshMs = Number(urlParams.get("refresh") || ROOT.dataset.refresh || 8000);
+  const TEAM_PIN = (urlParams.get("team") || "").trim();
+  const LIMIT_LIVE = Number(urlParams.get("limitLive") || 0);         // e.g., ?limitLive=6
+  const LIMIT_UP = Number(urlParams.get("limitUpcoming") || 0);       // e.g., ?limitUpcoming=10
+  const UPCOMING_HOURS = Number(urlParams.get("hoursUpcoming") || 24);// e.g., ?hoursUpcoming=12
 
-  // UI state bindings
+  UP_HOURS_SPAN.textContent = String(UPCOMING_HOURS);
+
+  // UI bindings
   REFRESH_SELECT.value = String(refreshMs);
   REFRESH_SELECT.addEventListener("change", () => {
     refreshMs = Number(REFRESH_SELECT.value);
     schedule();
   });
-
   if (TEAM_PIN) {
     TEAM_BADGE.hidden = false;
     TEAM_BADGE.textContent = `Pinned: ${TEAM_PIN}`;
   }
 
-  function setLastUpdated() {
-    LAST.textContent = "Last updated: " + new Date().toLocaleTimeString();
+  function setLastUpdated(note) {
+    const noteStr = note ? ` (${note})` : "";
+    LAST.textContent = "Last updated: " + new Date().toLocaleTimeString() + noteStr;
   }
 
+  // Helpers to read team names from heterogeneous community payloads
   function teamNameOf(m, idx) {
-    // different community payloads use slightly different shapes
     const t = idx === 1 ? (m.team1 || m.teams?.[0] || {}) : (m.team2 || m.teams?.[1] || {});
     return (t?.name || (typeof t === "string" ? t : "") || "").toString();
   }
@@ -40,18 +47,23 @@
     const t1 = teamNameOf(m, 1);
     const t2 = teamNameOf(m, 2);
 
+    // status/live flags
     const status = (m.status || m.live || "").toString().toLowerCase();
     const isLive = (status === "live" || status === "running" || m.live === true);
 
+    // scores (best-effort)
     const score1 = (m.score1 ?? m.result?.[0] ?? m.liveResult?.team1 ?? "");
     const score2 = (m.score2 ?? m.result?.[1] ?? m.liveResult?.team2 ?? "");
+
+    // time
+    const time = m.time ? new Date(m.time) : null;
 
     return {
       id: m.id || m.matchId || `${t1}-vs-${t2}-${m.time || ""}`,
       event: (m.event?.name || m.event || "").toString(),
       format: (m.format || "").toString(),
       map: (m.map || m.mapName || "").toString(),
-      time: m.time ? new Date(m.time) : null,
+      time,
       live: isLive,
       t1, t2,
       s1: (score1 !== undefined && score1 !== null) ? score1 : "",
@@ -59,10 +71,10 @@
     };
   }
 
-  function render(matches) {
-    LIST.innerHTML = "";
+  function renderList(container, matches, badgeTextWhenEmpty) {
+    container.innerHTML = "";
     if (!matches.length) {
-      LIST.innerHTML = '<div class="empty">No live matches right now.</div>';
+      container.innerHTML = `<div class="empty">${badgeTextWhenEmpty}</div>`;
       return;
     }
     for (const m of matches) {
@@ -88,58 +100,78 @@
         <div class="row map">${m.map ? ("Map: " + m.map) : ""}</div>
       `;
 
-      right.innerHTML = `<div class="status">${m.live ? "LIVE" : (m.time ? new Date(m.time).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) : "")}</div>`;
+      const rightLabel = m.live
+        ? "LIVE"
+        : (m.time ? m.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+      right.innerHTML = `<div class="status">${rightLabel}</div>`;
 
       a.appendChild(left);
       a.appendChild(right);
-      LIST.appendChild(a);
+      container.appendChild(a);
     }
   }
 
-async function load() {
-  try {
-    const res = await fetch(API, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    const arr = Array.isArray(raw) ? raw : [];
-    const now = Date.now();
-
-    // Normalize everything
-    const norm = arr.map(normalizeMatch);
-
-    // Buckets
-    const live = norm.filter(x => x.live);
-
-    // “Upcoming” within 24h (some feeds provide time as ms/ISO; our normalize sets Date or null)
-    const upcoming = norm
-      .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= 24*60*60*1000)
-    // sort soonest first
-      .sort((a,b) => a.time - b.time);
-
-    // “Finished” within last 6h (best-effort: items without live flag and with past time)
-    const recent = norm
-      .filter(x => !x.live && x.time && (now - x.time.getTime()) > 0 && (now - x.time.getTime()) <= 6*60*60*1000)
-      .sort((a,b) => b.time - a.time);
-
-    let toShow = live;
-    let headerNote = "LIVE";
-    if (toShow.length === 0 && upcoming.length) {
-      toShow = upcoming;
-      headerNote = "UPCOMING (next 24h)";
-    } else if (toShow.length === 0 && recent.length) {
-      toShow = recent;
-      headerNote = "RECENT (last 6h)";
-    }
-
-    render(toShow);
-    // Optional: display which bucket is showing (quick badge)
-    const last = document.getElementById("lastUpdated");
-    if (last) last.textContent = `Showing: ${headerNote} • Last updated: ` + new Date().toLocaleTimeString();
-  } catch (e) {
-    console.error(e);
-    LIST.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
+  function applyPinnedHighlight(container, pinLower) {
+    if (!pinLower) return;
+    const cards = container.querySelectorAll(".card");
+    cards.forEach(card => {
+      const names = Array.from(card.querySelectorAll(".team")).map(n => n.textContent.toLowerCase()).join(" ");
+      if (names.includes(pinLower)) card.classList.add("pinned");
+    });
   }
-}
+
+  async function load() {
+    try {
+      const res = await fetch(API, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      const arr = Array.isArray(raw) ? raw : [];
+
+      const all = arr.map(normalizeMatch);
+      const now = Date.now();
+      const upWindow = UPCOMING_HOURS * 60 * 60 * 1000;
+
+      // LIVE bucket
+      let live = all.filter(x => x.live);
+
+      // UPCOMING bucket (within next UPCOMING_HOURS)
+      let upcoming = all
+        .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= upWindow)
+        .sort((a, b) => a.time - b.time);
+
+      // Sorting for LIVE:
+      const pinLower = (TEAM_PIN || "").toLowerCase();
+      function hasPin(m) {
+        return pinLower && (m.t1.toLowerCase().includes(pinLower) || m.t2.toLowerCase().includes(pinLower));
+      }
+      live.sort((a, b) => {
+        const ap = hasPin(a) ? 1 : 0, bp = hasPin(b) ? 1 : 0;
+        if (ap !== bp) return bp - ap; // pinned first
+        const ae = (a.event || "").toLowerCase(), be = (b.event || "").toLowerCase();
+        if (ae !== be) return ae < be ? -1 : 1;
+        const at = a.time ? a.time.getTime() : 0, bt = b.time ? b.time.getTime() : 0;
+        return at - bt;
+      });
+
+      // Optional limits
+      if (LIMIT_LIVE > 0) live = live.slice(0, LIMIT_LIVE);
+      if (LIMIT_UP > 0) upcoming = upcoming.slice(0, LIMIT_UP);
+
+      // Render
+      renderList(LIST_LIVE, live, "No live matches right now.");
+      renderList(LIST_UP, upcoming, "No upcoming matches in the selected window.");
+
+      // Pin highlight
+      applyPinnedHighlight(LIST_LIVE, pinLower);
+      applyPinnedHighlight(LIST_UP, pinLower);
+
+      setLastUpdated();
+    } catch (e) {
+      console.error(e);
+      LIST_LIVE.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
+      LIST_UP.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
+    }
+  }
 
   let timer = null;
   function schedule() {
