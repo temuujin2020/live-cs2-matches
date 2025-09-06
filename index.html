@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Live CS Matches</title>
+  <title>CS Matches — Live & Upcoming</title>
+  <meta name="description" content="Auto-updating list of live and upcoming CS matches." />
   <link rel="stylesheet" href="assets/style.css" />
-  <meta name="description" content="Auto-updating list of currently running CS matches." />
+  <meta name="robots" content="noindex, nofollow" />
 </head>
 <body>
   <main class="page">
     <header class="top">
-      <h1>Live CS Matches</h1>
+      <h1>CS Matches — Live & Upcoming</h1>
       <div class="meta">
         <label class="refresh">
-          Refresh every
+          Refresh
           <select id="refreshSelect">
             <option value="5000">5s</option>
             <option value="8000" selected>8s</option>
@@ -21,27 +22,34 @@
             <option value="20000">20s</option>
           </select>
         </label>
-
-        <!-- Optional team pin/filter via URL: ?team=TheMongolZ -->
         <span id="teamBadge" class="team-badge" hidden></span>
         <span id="lastUpdated">Last updated: —</span>
       </div>
     </header>
 
     <section
-      class="cs2-live-matches"
       id="matchesRoot"
+      class="cs2-live-matches"
       data-refresh="8000"
       data-api="https://hltv-api.vercel.app/api/matches.json">
-      <div id="list" class="list" aria-live="polite">
+      
+      <!-- LIVE -->
+      <h2 class="section-title">LIVE</h2>
+      <div id="listLive" class="list" aria-live="polite">
         <div class="empty">Looking for live matches…</div>
       </div>
+
+      <!-- UPCOMING -->
+      <h2 class="section-title">UPCOMING (next <span id="upHoursSpan">24</span>h)</h2>
+      <div id="listUpcoming" class="list" aria-live="polite">
+        <div class="empty">Looking for upcoming matches…</div>
+      </div>
+
       <footer class="footnote">
-        Data is community-provided. This page auto-updates; times shown are local.
+        Data is community-provided. This page auto-updates; times shown are your local time.
       </footer>
     </section>
   </main>
-
   <script src="assets/app.js" defer></script>
 </body>
 </html>
