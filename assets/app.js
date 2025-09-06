@@ -9,24 +9,26 @@
   const TEAM_BADGE = document.getElementById("teamBadge");
   const UP_HOURS_SPAN = document.getElementById("upHoursSpan");
 
-  // Config from HTML/data-attrs + URL params
+  // --- Config from HTML/data-attrs + URL params ---
   const API_DEFAULT = ROOT.dataset.api;
   const urlParams = new URLSearchParams(location.search);
   const API = urlParams.get("api") || API_DEFAULT;
   let refreshMs = Number(urlParams.get("refresh") || ROOT.dataset.refresh || 8000);
   const TEAM_PIN = (urlParams.get("team") || "").trim();
-  const LIMIT_LIVE = Number(urlParams.get("limitLive") || 0);         // e.g., ?limitLive=6
-  const LIMIT_UP = Number(urlParams.get("limitUpcoming") || 0);       // e.g., ?limitUpcoming=10
-  const UPCOMING_HOURS = Number(urlParams.get("hoursUpcoming") || 24);// e.g., ?hoursUpcoming=12
+  const LIMIT_LIVE = Number(urlParams.get("limitLive") || 0);          // e.g., ?limitLive=6
+  const LIMIT_UP   = Number(urlParams.get("limitUpcoming") || 0);      // e.g., ?limitUpcoming=10
+  const UPCOMING_HOURS = Number(urlParams.get("hoursUpcoming") || 24); // e.g., ?hoursUpcoming=12
 
-  UP_HOURS_SPAN.textContent = String(UPCOMING_HOURS);
+  if (UP_HOURS_SPAN) UP_HOURS_SPAN.textContent = String(UPCOMING_HOURS);
 
-  // UI bindings
-  REFRESH_SELECT.value = String(refreshMs);
-  REFRESH_SELECT.addEventListener("change", () => {
-    refreshMs = Number(REFRESH_SELECT.value);
-    schedule();
-  });
+  // --- UI bindings ---
+  if (REFRESH_SELECT) {
+    REFRESH_SELECT.value = String(refreshMs);
+    REFRESH_SELECT.addEventListener("change", () => {
+      refreshMs = Number(REFRESH_SELECT.value);
+      schedule();
+    });
+  }
   if (TEAM_PIN) {
     TEAM_BADGE.hidden = false;
     TEAM_BADGE.textContent = `Pinned: ${TEAM_PIN}`;
@@ -37,46 +39,63 @@
     LAST.textContent = "Last updated: " + new Date().toLocaleTimeString() + noteStr;
   }
 
-  // Helpers to read team names from heterogeneous community payloads
-  function teamNameOf(m, idx) {
-    const t = idx === 1 ? (m.team1 || m.teams?.[0] || {}) : (m.team2 || m.teams?.[1] || {});
-    return (t?.name || (typeof t === "string" ? t : "") || "").toString();
+  // --- Helpers: team parsing + initials ---
+  function teamFromPayload(m, idx) {
+    const raw = idx === 1 ? (m.team1 || m.teams?.[0] || {}) : (m.team2 || m.teams?.[1] || {});
+    if (typeof raw === "string") return { name: raw, logo: null };
+    return {
+      name: (raw?.name || "").toString(),
+      // common logo keys seen in community feeds
+      logo: raw?.logo || raw?.image || raw?.logoUrl || raw?.logoURL || null
+    };
+  }
+  function initials(name) {
+    return (name || "")
+      .split(/\s+/).filter(Boolean).map(s => s[0]).join("").slice(0,3).toUpperCase() || "?";
   }
 
+  // --- Normalize incoming item to a consistent shape ---
   function normalizeMatch(m) {
-    const t1 = teamNameOf(m, 1);
-    const t2 = teamNameOf(m, 2);
+    const t1 = teamFromPayload(m, 1);
+    const t2 = teamFromPayload(m, 2);
 
-    // status/live flags
     const status = (m.status || m.live || "").toString().toLowerCase();
     const isLive = (status === "live" || status === "running" || m.live === true);
 
-    // scores (best-effort)
     const score1 = (m.score1 ?? m.result?.[0] ?? m.liveResult?.team1 ?? "");
     const score2 = (m.score2 ?? m.result?.[1] ?? m.liveResult?.team2 ?? "");
 
-    // time
     const time = m.time ? new Date(m.time) : null;
 
     return {
-      id: m.id || m.matchId || `${t1}-vs-${t2}-${m.time || ""}`,
+      id: m.id || m.matchId || `${t1.name}-vs-${t2.name}-${m.time || ""}`,
       event: (m.event?.name || m.event || "").toString(),
       format: (m.format || "").toString(),
       map: (m.map || m.mapName || "").toString(),
       time,
       live: isLive,
-      t1, t2,
+      t1Name: t1.name, t2Name: t2.name,
+      t1Logo: t1.logo, t2Logo: t2.logo,
       s1: (score1 !== undefined && score1 !== null) ? score1 : "",
       s2: (score2 !== undefined && score2 !== null) ? score2 : ""
     };
   }
 
-  function renderList(container, matches, badgeTextWhenEmpty) {
+  // --- Render a list (LIVE or UPCOMING) with logos ---
+  function renderList(container, matches, emptyText) {
     container.innerHTML = "";
     if (!matches.length) {
-      container.innerHTML = `<div class="empty">${badgeTextWhenEmpty}</div>`;
+      container.innerHTML = `<div class="empty">${emptyText}</div>`;
       return;
     }
+
+    const crestHTML = (logo, name) => {
+      if (logo) {
+        return `<div class="crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
+      }
+      return `<div class="crest"><span>${initials(name)}</span></div>`;
+    };
+
     for (const m of matches) {
       const a = document.createElement("a");
       a.className = "card" + (m.live ? " live" : "");
@@ -89,14 +108,23 @@
 
       left.innerHTML = `
         <div class="row event">${m.event || "—"} ${m.format ? "• " + m.format : ""}</div>
-        <div class="row">
-          <div class="team">${m.t1 || "TBD"}</div>
+
+        <div class="row teams">
+          <div class="teamline">
+            ${crestHTML(m.t1Logo, m.t1Name)}
+            <div class="team">${m.t1Name || "TBD"}</div>
+          </div>
           <div class="score">${m.s1 !== "" ? m.s1 : ""}</div>
         </div>
-        <div class="row">
-          <div class="team">${m.t2 || "TBD"}</div>
+
+        <div class="row teams">
+          <div class="teamline">
+            ${crestHTML(m.t2Logo, m.t2Name)}
+            <div class="team">${m.t2Name || "TBD"}</div>
+          </div>
           <div class="score">${m.s2 !== "" ? m.s2 : ""}</div>
         </div>
+
         <div class="row map">${m.map ? ("Map: " + m.map) : ""}</div>
       `;
 
@@ -111,15 +139,19 @@
     }
   }
 
+  // --- Pinned-team orange outline (CSS must include .card.pinned rule) ---
   function applyPinnedHighlight(container, pinLower) {
     if (!pinLower) return;
     const cards = container.querySelectorAll(".card");
     cards.forEach(card => {
-      const names = Array.from(card.querySelectorAll(".team")).map(n => n.textContent.toLowerCase()).join(" ");
+      const names = Array.from(card.querySelectorAll(".team"))
+        .map(n => n.textContent.toLowerCase())
+        .join(" ");
       if (names.includes(pinLower)) card.classList.add("pinned");
     });
   }
 
+  // --- Fetch + bucket into LIVE / UPCOMING ---
   async function load() {
     try {
       const res = await fetch(API, { cache: "no-store" });
@@ -131,18 +163,21 @@
       const now = Date.now();
       const upWindow = UPCOMING_HOURS * 60 * 60 * 1000;
 
-      // LIVE bucket
+      // LIVE matches
       let live = all.filter(x => x.live);
 
-      // UPCOMING bucket (within next UPCOMING_HOURS)
+      // UPCOMING within next N hours
       let upcoming = all
         .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= upWindow)
         .sort((a, b) => a.time - b.time);
 
-      // Sorting for LIVE:
+      // Sort LIVE: pinned → event name → start time
       const pinLower = (TEAM_PIN || "").toLowerCase();
       function hasPin(m) {
-        return pinLower && (m.t1.toLowerCase().includes(pinLower) || m.t2.toLowerCase().includes(pinLower));
+        return pinLower && (
+          m.t1Name.toLowerCase().includes(pinLower) ||
+          m.t2Name.toLowerCase().includes(pinLower)
+        );
       }
       live.sort((a, b) => {
         const ap = hasPin(a) ? 1 : 0, bp = hasPin(b) ? 1 : 0;
@@ -169,10 +204,11 @@
     } catch (e) {
       console.error(e);
       LIST_LIVE.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
-      LIST_UP.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
+      LIST_UP.innerHTML   = '<div class="empty">Couldn’t load matches right now.</div>';
     }
   }
 
+  // --- Polling scheduler ---
   let timer = null;
   function schedule() {
     if (timer) clearInterval(timer);
