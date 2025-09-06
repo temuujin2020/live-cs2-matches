@@ -49,3 +49,14 @@ body {
 
 /* highlight cards that include the pinned team */
 .card.pinned { outline: 2px solid #f97316; outline-offset: 2px; }
+
+/* --- team logos / crests --- */
+.row.teams { gap: 10px; }
+.teamline { display:flex; align-items:center; gap:8px; min-width:0; }
+.crest {
+  width: 28px; height: 28px; flex: 0 0 28px;
+  border-radius: 50%; background:#f3f4f6; overflow:hidden;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.crest img { width:100%; height:100%; object-fit:contain; display:block; }
+.crest span { font-size:.7rem; color:#374151; font-weight:800; }
