@@ -195,6 +195,22 @@ const DEMO_DATA = [
 
   // --- Fetch + bucket into LIVE / UPCOMING ---
   async function load() {
+
+    if (DEMO) {
+  const all = DEMO_DATA.map(normalizeMatch);
+  const live = all.filter(x => x.live);
+  const upcoming = all.filter(x => !x.live);
+
+  renderList(LIST_LIVE, live, "No live matches right now.");
+  renderList(LIST_UP, upcoming, "No upcoming matches in the selected window.");
+
+  applyPinnedHighlight(LIST_LIVE, (TEAM_PIN || "").toLowerCase());
+  applyPinnedHighlight(LIST_UP, (TEAM_PIN || "").toLowerCase());
+
+  setLastUpdated("Demo mode");
+  return;
+}
+    
     try {
       const res = await fetch(API, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
