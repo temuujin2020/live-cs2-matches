@@ -39,14 +39,21 @@
     LAST.textContent = "Last updated: " + new Date().toLocaleTimeString() + noteStr;
   }
 
-  // --- Helpers: team parsing + initials ---
+  // --- Helpers: parse team & event objects + initials ---
   function teamFromPayload(m, idx) {
     const raw = idx === 1 ? (m.team1 || m.teams?.[0] || {}) : (m.team2 || m.teams?.[1] || {});
     if (typeof raw === "string") return { name: raw, logo: null };
     return {
       name: (raw?.name || "").toString(),
-      // common logo keys seen in community feeds
       logo: raw?.logo || raw?.image || raw?.logoUrl || raw?.logoURL || null
+    };
+  }
+  function eventFromPayload(m) {
+    const ev = m.event || {};
+    if (typeof ev === "string") return { name: ev, logo: null };
+    return {
+      name: (ev?.name || "").toString(),
+      logo: ev?.logo || ev?.image || ev?.logoUrl || ev?.logoURL || null
     };
   }
   function initials(name) {
@@ -58,6 +65,7 @@
   function normalizeMatch(m) {
     const t1 = teamFromPayload(m, 1);
     const t2 = teamFromPayload(m, 2);
+    const ev = eventFromPayload(m);
 
     const status = (m.status || m.live || "").toString().toLowerCase();
     const isLive = (status === "live" || status === "running" || m.live === true);
@@ -69,7 +77,8 @@
 
     return {
       id: m.id || m.matchId || `${t1.name}-vs-${t2.name}-${m.time || ""}`,
-      event: (m.event?.name || m.event || "").toString(),
+      eventName: ev.name,
+      eventLogo: ev.logo,
       format: (m.format || "").toString(),
       map: (m.map || m.mapName || "").toString(),
       time,
@@ -81,7 +90,7 @@
     };
   }
 
-  // --- Render a list (LIVE or UPCOMING) with logos ---
+  // --- Render a list (LIVE or UPCOMING) with event + team logos ---
   function renderList(container, matches, emptyText) {
     container.innerHTML = "";
     if (!matches.length) {
@@ -90,10 +99,12 @@
     }
 
     const crestHTML = (logo, name) => {
-      if (logo) {
-        return `<div class="crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
-      }
+      if (logo) return `<div class="crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
       return `<div class="crest"><span>${initials(name)}</span></div>`;
+    };
+    const eventCrestHTML = (logo, name) => {
+      if (logo) return `<div class="event-crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
+      return `<div class="event-crest"></div>`;
     };
 
     for (const m of matches) {
@@ -107,7 +118,11 @@
       const right = document.createElement("div");
 
       left.innerHTML = `
-        <div class="row event">${m.event || "—"} ${m.format ? "• " + m.format : ""}</div>
+        <div class="row eventline">
+          ${eventCrestHTML(m.eventLogo, m.eventName)}
+          <div class="event-name">${m.eventName || "—"}</div>
+          ${m.format ? `<span class="event-dot">•</span><div>${m.format}</div>` : ""}
+        </div>
 
         <div class="row teams">
           <div class="teamline">
@@ -139,7 +154,7 @@
     }
   }
 
-  // --- Pinned-team orange outline (CSS must include .card.pinned rule) ---
+  // --- Pinned-team orange outline ---
   function applyPinnedHighlight(container, pinLower) {
     if (!pinLower) return;
     const cards = container.querySelectorAll(".card");
@@ -163,15 +178,15 @@
       const now = Date.now();
       const upWindow = UPCOMING_HOURS * 60 * 60 * 1000;
 
-      // LIVE matches
+      // LIVE
       let live = all.filter(x => x.live);
 
-      // UPCOMING within next N hours
+      // UPCOMING (within next N hours)
       let upcoming = all
         .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= upWindow)
         .sort((a, b) => a.time - b.time);
 
-      // Sort LIVE: pinned → event name → start time
+      // Sort LIVE: pinned → event → time
       const pinLower = (TEAM_PIN || "").toLowerCase();
       function hasPin(m) {
         return pinLower && (
@@ -181,8 +196,8 @@
       }
       live.sort((a, b) => {
         const ap = hasPin(a) ? 1 : 0, bp = hasPin(b) ? 1 : 0;
-        if (ap !== bp) return bp - ap; // pinned first
-        const ae = (a.event || "").toLowerCase(), be = (b.event || "").toLowerCase();
+        if (ap !== bp) return bp - ap;
+        const ae = (a.eventName || "").toLowerCase(), be = (b.eventName || "").toLowerCase();
         if (ae !== be) return ae < be ? -1 : 1;
         const at = a.time ? a.time.getTime() : 0, bt = b.time ? b.time.getTime() : 0;
         return at - bt;
