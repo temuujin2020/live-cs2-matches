@@ -18,6 +18,7 @@ body {
 }
 
 .page { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .top h1 { margin: 0; font-size: 1.4rem; }
 .meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -30,17 +31,40 @@ body {
 
 .list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 6px; }
 .card {
-  border: 1px solid var(--line); border-radius: 14px; padding: 12px;
-  display: grid; grid-template-columns: 1fr auto; gap: 8px;
-  text-decoration: none; color: inherit; background: #fff; transition: box-shadow .2s;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  transition: box-shadow .2s;
 }
 .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+
 .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.event { font-size: .9rem; color: var(--muted); }
+
+/* Event line (event logo + name + format) */
+.row.eventline { gap: 10px; color: var(--muted); font-size: .9rem; }
+.event-crest {
+  width: 22px; height: 22px; flex: 0 0 22px;
+  border-radius: 6px; background: #f3f4f6;
+  display: inline-flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.event-crest img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.event-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-dot { opacity: .6; }
+
 .team { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .score { font-weight: 800; }
 .map { font-size: .95rem; color: #111827; }
-.status { font-size: .8rem; padding: .2rem .6rem; border-radius: 999px; background: var(--pill); color: #991b1b; font-weight: 700; }
+.status {
+  font-size: .8rem; padding: .2rem .6rem; border-radius: 999px;
+  background: var(--pill); color: #991b1b; font-weight: 700;
+}
 .live { background: #fff1f2; }
 .empty { text-align: center; opacity: .7; padding: 1rem; }
 .footnote { margin-top: 12px; color: var(--muted); font-size: .85rem; }
@@ -52,11 +76,11 @@ body {
 
 /* --- team logos / crests --- */
 .row.teams { gap: 10px; }
-.teamline { display:flex; align-items:center; gap:8px; min-width:0; }
+.teamline { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .crest {
   width: 28px; height: 28px; flex: 0 0 28px;
-  border-radius: 50%; background:#f3f4f6; overflow:hidden;
-  display:inline-flex; align-items:center; justify-content:center;
+  border-radius: 50%; background: #f3f4f6;
+  overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
 }
-.crest img { width:100%; height:100%; object-fit:contain; display:block; }
-.crest span { font-size:.7rem; color:#374151; font-weight:800; }
+.crest img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.crest span { font-size: .7rem; color: #374151; font-weight: 800; }
