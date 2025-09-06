@@ -55,3 +55,9 @@ body {
 @media (max-width: 720px) {
   .list { grid-template-columns: 1fr; }
 }
+
+/* highlight cards that include the pinned team */
+.card.pinned {
+  outline: 2px solid #f97316; /* orange border */
+  outline-offset: 2px;
+}
