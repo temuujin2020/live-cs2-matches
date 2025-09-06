@@ -1,86 +1,276 @@
-:root {
-  --bg: #ffffff;
-  --ink: #0f172a;
-  --muted: #6b7280;
-  --card: #ffffff;
-  --line: #e5e7eb;
-  --pill: #f1f5f9;
-  --radius: 16px;
-}
+(function () {
+  const ROOT = document.getElementById("matchesRoot");
+  if (!ROOT) return;
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  color: var(--ink);
-  background: var(--bg);
-}
+  const LIST_LIVE = document.getElementById("listLive");
+  const LIST_UP   = document.getElementById("listUpcoming");
+  const LAST      = document.getElementById("lastUpdated");
+  const REFRESH_SELECT = document.getElementById("refreshSelect");
+  const TEAM_BADGE = document.getElementById("teamBadge");
+  const UP_HOURS_SPAN = document.getElementById("upHoursSpan");
 
-.page { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+  // --- Config from HTML/data-attrs + URL params ---
+  const API_DEFAULT = ROOT.dataset.api;
+  const urlParams = new URLSearchParams(location.search);
+  const API = urlParams.get("api") || API_DEFAULT;
+  let refreshMs = Number(urlParams.get("refresh") || ROOT.dataset.refresh || 8000);
+  const TEAM_PIN = (urlParams.get("team") || "").trim();
+  const LIMIT_LIVE = Number(urlParams.get("limitLive") || 0);          // e.g., ?limitLive=6
+  const LIMIT_UP   = Number(urlParams.get("limitUpcoming") || 0);      // e.g., ?limitUpcoming=10
+  const UPCOMING_HOURS = Number(urlParams.get("hoursUpcoming") || 24); // e.g., ?hoursUpcoming=12
+  if (UP_HOURS_SPAN) UP_HOURS_SPAN.textContent = String(UPCOMING_HOURS);
 
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.top h1 { margin: 0; font-size: 1.4rem; }
-.meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.refresh select { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
-.team-badge { padding: 2px 8px; border-radius: 999px; background: var(--pill); font-size: .85rem; color: var(--muted); }
-#lastUpdated { color: var(--muted); font-size: .9rem; }
+  // --- Demo mode toggle & sample data (use ?demo=1) ---
+  const DEMO = urlParams.get("demo") === "1";
+  const DEMO_DATA = [
+    {
+      id: "demo1",
+      event: { name: "Demo Cup Finals", logo: null },
+      team1: { name: "TheMongolZ", logo: null },
+      team2: { name: "Heroic", logo: null },
+      status: "live",
+      map: "Inferno",
+      format: "bo1",
+      score1: 7,
+      score2: 10,
+      time: Date.now()
+    },
+    {
+      id: "demo2",
+      event: { name: "Demo League", logo: null },
+      team1: { name: "G2", logo: null },
+      team2: { name: "NaVi", logo: null },
+      status: "upcoming",
+      map: "Mirage",
+      format: "bo3",
+      time: Date.now() + 2 * 60 * 60 * 1000 // +2h
+    }
+  ];
 
-.cs2-live-matches { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
-.section-title { margin: 14px 4px 6px; font-size: 1.05rem; color: #111827; }
+  // --- UI bindings ---
+  if (REFRESH_SELECT) {
+    REFRESH_SELECT.value = String(refreshMs);
+    REFRESH_SELECT.addEventListener("change", () => {
+      refreshMs = Number(REFRESH_SELECT.value);
+      schedule();
+    });
+  }
+  if (TEAM_PIN) {
+    TEAM_BADGE.hidden = false;
+    TEAM_BADGE.textContent = `Pinned: ${TEAM_PIN}`;
+  }
 
-.list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 6px; }
-.card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  text-decoration: none;
-  color: inherit;
-  background: #fff;
-  transition: box-shadow .2s;
-}
-.card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+  function setLastUpdated(note) {
+    const noteStr = note ? ` (${note})` : "";
+    LAST.textContent = "Last updated: " + new Date().toLocaleTimeString() + noteStr;
+  }
 
-.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  // --- Helpers: parse team & event objects + initials ---
+  function teamFromPayload(m, idx) {
+    const raw = idx === 1 ? (m.team1 || m.teams?.[0] || {}) : (m.team2 || m.teams?.[1] || {});
+    if (typeof raw === "string") return { name: raw, logo: null };
+    return {
+      name: (raw?.name || "").toString(),
+      logo: raw?.logo || raw?.image || raw?.logoUrl || raw?.logoURL || null
+    };
+  }
+  function eventFromPayload(m) {
+    const ev = m.event || {};
+    if (typeof ev === "string") return { name: ev, logo: null };
+    return {
+      name: (ev?.name || "").toString(),
+      logo: ev?.logo || ev?.image || ev?.logoUrl || ev?.logoURL || null
+    };
+  }
+  function initials(name) {
+    return (name || "")
+      .split(/\s+/).filter(Boolean).map(s => s[0]).join("").slice(0,3).toUpperCase() || "?";
+  }
 
-/* Event line (event logo + name + format) */
-.row.eventline { gap: 10px; color: var(--muted); font-size: .9rem; }
-.event-crest {
-  width: 22px; height: 22px; flex: 0 0 22px;
-  border-radius: 6px; background: #f3f4f6;
-  display: inline-flex; align-items: center; justify-content: center;
-  overflow: hidden;
-}
-.event-crest img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.event-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.event-dot { opacity: .6; }
+  // --- Normalize incoming item to a consistent shape ---
+  function normalizeMatch(m) {
+    const t1 = teamFromPayload(m, 1);
+    const t2 = teamFromPayload(m, 2);
+    const ev = eventFromPayload(m);
 
-.team { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.score { font-weight: 800; }
-.map { font-size: .95rem; color: #111827; }
-.status {
-  font-size: .8rem; padding: .2rem .6rem; border-radius: 999px;
-  background: var(--pill); color: #991b1b; font-weight: 700;
-}
-.live { background: #fff1f2; }
-.empty { text-align: center; opacity: .7; padding: 1rem; }
-.footnote { margin-top: 12px; color: var(--muted); font-size: .85rem; }
+    const status = (m.status || m.live || "").toString().toLowerCase();
+    const isLive = (status === "live" || status === "running" || m.live === true);
 
-@media (max-width: 720px) { .list { grid-template-columns: 1fr; } }
+    const score1 = (m.score1 ?? m.result?.[0] ?? m.liveResult?.team1 ?? "");
+    const score2 = (m.score2 ?? m.result?.[1] ?? m.liveResult?.team2 ?? "");
 
-/* highlight cards that include the pinned team */
-.card.pinned { outline: 2px solid #f97316; outline-offset: 2px; }
+    const time = m.time ? new Date(m.time) : null;
 
-/* --- team logos / crests --- */
-.row.teams { gap: 10px; }
-.teamline { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.crest {
-  width: 28px; height: 28px; flex: 0 0 28px;
-  border-radius: 50%; background: #f3f4f6;
-  overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
-}
-.crest img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.crest span { font-size: .7rem; color: #374151; font-weight: 800; }
+    return {
+      id: m.id || m.matchId || `${t1.name}-vs-${t2.name}-${m.time || ""}`,
+      eventName: ev.name,
+      eventLogo: ev.logo,
+      format: (m.format || "").toString(),
+      map: (m.map || m.mapName || "").toString(),
+      time,
+      live: isLive,
+      t1Name: t1.name, t2Name: t2.name,
+      t1Logo: t1.logo, t2Logo: t2.logo,
+      s1: (score1 !== undefined && score1 !== null) ? score1 : "",
+      s2: (score2 !== undefined && score2 !== null) ? score2 : ""
+    };
+  }
+
+  // --- Render a list (LIVE or UPCOMING) with event + team logos ---
+  function renderList(container, matches, emptyText) {
+    container.innerHTML = "";
+    if (!matches.length) {
+      container.innerHTML = `<div class="empty">${emptyText}</div>`;
+      return;
+    }
+
+    const crestHTML = (logo, name) => {
+      if (logo) return `<div class="crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
+      return `<div class="crest"><span>${initials(name)}</span></div>`;
+    };
+    const eventCrestHTML = (logo, name) => {
+      if (logo) return `<div class="event-crest"><img src="${logo}" alt="${name} logo" loading="lazy" /></div>`;
+      return `<div class="event-crest"></div>`;
+    };
+
+    for (const m of matches) {
+      const a = document.createElement("a");
+      a.className = "card" + (m.live ? " live" : "");
+      a.href = `https://www.hltv.org/matches/${encodeURIComponent(m.id || "")}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+
+      const left = document.createElement("div");
+      const right = document.createElement("div");
+
+      left.innerHTML = `
+        <div class="row eventline">
+          ${eventCrestHTML(m.eventLogo, m.eventName)}
+          <div class="event-name">${m.eventName || "—"}</div>
+          ${m.format ? `<span class="event-dot">•</span><div>${m.format}</div>` : ""}
+        </div>
+
+        <div class="row teams">
+          <div class="teamline">
+            ${crestHTML(m.t1Logo, m.t1Name)}
+            <div class="team">${m.t1Name || "TBD"}</div>
+          </div>
+          <div class="score">${m.s1 !== "" ? m.s1 : ""}</div>
+        </div>
+
+        <div class="row teams">
+          <div class="teamline">
+            ${crestHTML(m.t2Logo, m.t2Name)}
+            <div class="team">${m.t2Name || "TBD"}</div>
+          </div>
+          <div class="score">${m.s2 !== "" ? m.s2 : ""}</div>
+        </div>
+
+        <div class="row map">${m.map ? ("Map: " + m.map) : ""}</div>
+      `;
+
+      const rightLabel = m.live
+        ? "LIVE"
+        : (m.time ? m.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+      right.innerHTML = `<div class="status">${rightLabel}</div>`;
+
+      a.appendChild(left);
+      a.appendChild(right);
+      container.appendChild(a);
+    }
+  }
+
+  // --- Pinned-team orange outline ---
+  function applyPinnedHighlight(container, pinLower) {
+    if (!pinLower) return;
+    const cards = container.querySelectorAll(".card");
+    cards.forEach(card => {
+      const names = Array.from(card.querySelectorAll(".team"))
+        .map(n => n.textContent.toLowerCase())
+        .join(" ");
+      if (names.includes(pinLower)) card.classList.add("pinned");
+    });
+  }
+
+  // --- Fetch + bucket into LIVE / UPCOMING ---
+  async function load() {
+    try {
+      // Demo mode: render fake data and bail
+      if (DEMO) {
+        const all = DEMO_DATA.map(normalizeMatch);
+        const live = all.filter(x => x.live);
+        const upcoming = all.filter(x => !x.live);
+
+        renderList(LIST_LIVE, live, "No live matches right now.");
+        renderList(LIST_UP, upcoming, "No upcoming matches in the selected window.");
+        applyPinnedHighlight(LIST_LIVE, (TEAM_PIN || "").toLowerCase());
+        applyPinnedHighlight(LIST_UP, (TEAM_PIN || "").toLowerCase());
+        setLastUpdated("Demo mode");
+        return;
+      }
+
+      // Normal mode
+      const res = await fetch(API, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      const arr = Array.isArray(raw) ? raw : [];
+
+      const all = arr.map(normalizeMatch);
+      const now = Date.now();
+      const upWindow = UPCOMING_HOURS * 60 * 60 * 1000;
+
+      // LIVE
+      let live = all.filter(x => x.live);
+
+      // UPCOMING (within next N hours)
+      let upcoming = all
+        .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= upWindow)
+        .sort((a, b) => a.time - b.time);
+
+      // Sort LIVE: pinned → event → time
+      const pinLower = (TEAM_PIN || "").toLowerCase();
+      function hasPin(m) {
+        return pinLower && (
+          m.t1Name.toLowerCase().includes(pinLower) ||
+          m.t2Name.toLowerCase().includes(pinLower)
+        );
+      }
+      live.sort((a, b) => {
+        const ap = hasPin(a) ? 1 : 0, bp = hasPin(b) ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+        const ae = (a.eventName || "").toLowerCase(), be = (b.eventName || "").toLowerCase();
+        if (ae !== be) return ae < be ? -1 : 1;
+        const at = a.time ? a.time.getTime() : 0, bt = b.time ? b.time.getTime() : 0;
+        return at - bt;
+      });
+
+      // Optional limits
+      if (LIMIT_LIVE > 0) live = live.slice(0, LIMIT_LIVE);
+      if (LIMIT_UP > 0) upcoming = upcoming.slice(0, LIMIT_UP);
+
+      // Render
+      renderList(LIST_LIVE, live, "No live matches right now.");
+      renderList(LIST_UP, upcoming, "No upcoming matches in the selected window.");
+
+      // Pin highlight
+      applyPinnedHighlight(LIST_LIVE, pinLower);
+      applyPinnedHighlight(LIST_UP, pinLower);
+
+      setLastUpdated();
+    } catch (e) {
+      console.error(e);
+      LIST_LIVE.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
+      LIST_UP.innerHTML   = '<div class="empty">Couldn’t load matches right now.</div>';
+    }
+  }
+
+  // --- Polling scheduler ---
+  let timer = null;
+  function schedule() {
+    if (timer) clearInterval(timer);
+    load();
+    timer = setInterval(load, refreshMs);
+  }
+
+  schedule();
+})();
