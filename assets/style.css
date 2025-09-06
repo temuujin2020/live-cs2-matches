@@ -1,0 +1,57 @@
+:root {
+  --bg: #ffffff;
+  --ink: #0f172a;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --line: #e5e7eb;
+  --pill: #f1f5f9;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.page { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.top h1 { margin: 0; font-size: 1.4rem; }
+.meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.refresh select { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.team-badge {
+  padding: 2px 8px; border-radius: 999px; background: var(--pill);
+  font-size: .85rem; color: var(--muted);
+}
+#lastUpdated { color: var(--muted); font-size: .9rem; }
+
+.cs2-live-matches {
+  margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+}
+.list {
+  display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 10px;
+}
+.card {
+  border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+  display: grid; grid-template-columns: 1fr auto; gap: 8px;
+  text-decoration: none; color: inherit; background: #fff; transition: box-shadow .2s;
+}
+.card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.event { font-size: .9rem; color: var(--muted); }
+.team { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score { font-weight: 800; }
+.map { font-size: .95rem; color: #111827; }
+.status { font-size: .8rem; padding: .2rem .6rem; border-radius: 999px; background: var(--pill); color: #991b1b; font-weight: 700; }
+.live { background: #fff1f2; }
+.empty { text-align: center; opacity: .7; padding: 1rem; }
+.footnote { margin-top: 12px; color: var(--muted); font-size: .85rem; }
+
+@media (max-width: 720px) {
+  .list { grid-template-columns: 1fr; }
+}
