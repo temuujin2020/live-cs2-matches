@@ -96,31 +96,50 @@
     }
   }
 
-  async function load() {
-    try {
-      const res = await fetch(API, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const raw = await res.json();
-      const arr = Array.isArray(raw) ? raw : [];
-      let items = arr.map(normalizeMatch).filter(x => x.live);
+async function load() {
+  try {
+    const res = await fetch(API, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    const arr = Array.isArray(raw) ? raw : [];
+    const now = Date.now();
 
-      // Pin/boost a team if requested
-      if (TEAM_PIN) {
-        const pin = TEAM_PIN.toLowerCase();
-        items.sort((a, b) => {
-          const aHit = a.t1.toLowerCase().includes(pin) || a.t2.toLowerCase().includes(pin);
-          const bHit = b.t1.toLowerCase().includes(pin) || b.t2.toLowerCase().includes(pin);
-          return (aHit === bHit) ? 0 : (aHit ? -1 : 1);
-        });
-      }
+    // Normalize everything
+    const norm = arr.map(normalizeMatch);
 
-      render(items);
-      setLastUpdated();
-    } catch (e) {
-      console.error(e);
-      LIST.innerHTML = '<div class="empty">Couldn’t load live matches right now.</div>';
+    // Buckets
+    const live = norm.filter(x => x.live);
+
+    // “Upcoming” within 24h (some feeds provide time as ms/ISO; our normalize sets Date or null)
+    const upcoming = norm
+      .filter(x => !x.live && x.time && (x.time.getTime() - now) > 0 && (x.time.getTime() - now) <= 24*60*60*1000)
+    // sort soonest first
+      .sort((a,b) => a.time - b.time);
+
+    // “Finished” within last 6h (best-effort: items without live flag and with past time)
+    const recent = norm
+      .filter(x => !x.live && x.time && (now - x.time.getTime()) > 0 && (now - x.time.getTime()) <= 6*60*60*1000)
+      .sort((a,b) => b.time - a.time);
+
+    let toShow = live;
+    let headerNote = "LIVE";
+    if (toShow.length === 0 && upcoming.length) {
+      toShow = upcoming;
+      headerNote = "UPCOMING (next 24h)";
+    } else if (toShow.length === 0 && recent.length) {
+      toShow = recent;
+      headerNote = "RECENT (last 6h)";
     }
+
+    render(toShow);
+    // Optional: display which bucket is showing (quick badge)
+    const last = document.getElementById("lastUpdated");
+    if (last) last.textContent = `Showing: ${headerNote} • Last updated: ` + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.error(e);
+    LIST.innerHTML = '<div class="empty">Couldn’t load matches right now.</div>';
   }
+}
 
   let timer = null;
   function schedule() {
